@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26730.16
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeaService", "TeaService\TeaService.csproj", "{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}"
+EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "TeaService Setup", "TeaService Setup\TeaService Setup.vdproj", "{7E249045-6FDE-43BF-B49F-BCF239FFE0EA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		CD_ROM|Any CPU = CD_ROM|Any CPU
+		Debug|Any CPU = Debug|Any CPU
+		DVD-5|Any CPU = DVD-5|Any CPU
+		Release|Any CPU = Release|Any CPU
+		SingleImage|Any CPU = SingleImage|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.CD_ROM|Any CPU.ActiveCfg = Release|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.CD_ROM|Any CPU.Build.0 = Release|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.DVD-5|Any CPU.ActiveCfg = Debug|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.DVD-5|Any CPU.Build.0 = Debug|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.SingleImage|Any CPU.ActiveCfg = Release|Any CPU
+		{A2EF9E94-AC06-45E4-B4EA-7CCFB1ED98F7}.SingleImage|Any CPU.Build.0 = Release|Any CPU
+		{7E249045-6FDE-43BF-B49F-BCF239FFE0EA}.CD_ROM|Any CPU.ActiveCfg = Release
+		{7E249045-6FDE-43BF-B49F-BCF239FFE0EA}.Debug|Any CPU.ActiveCfg = Debug
+		{7E249045-6FDE-43BF-B49F-BCF239FFE0EA}.DVD-5|Any CPU.ActiveCfg = Debug
+		{7E249045-6FDE-43BF-B49F-BCF239FFE0EA}.Release|Any CPU.ActiveCfg = Release
+		{7E249045-6FDE-43BF-B49F-BCF239FFE0EA}.SingleImage|Any CPU.ActiveCfg = Release
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3E707A51-ADE7-4DDA-8D21-A724AC14BCD0}
+	EndGlobalSection
+EndGlobal
