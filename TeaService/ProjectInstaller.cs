@@ -32,7 +32,12 @@ namespace TeaService
 
             ServiceActions sc = new ServiceActions();
             
-            string httpcode = sc.Register(this.Context.Parameters["username"], this.Context.Parameters["password"], this.Context.Parameters["vmname"]).Result;
+            string httpcode = sc.Register(
+                this.Context.Parameters["username"], 
+                this.Context.Parameters["password"], 
+                this.Context.Parameters["vmname"],
+                this.Context.Parameters["malwareX"],
+                this.Context.Parameters["malwareY"]).Result;
             if (!sc.registered)
             {
                 throw new ApplicationException($"Error {httpcode} registering service");

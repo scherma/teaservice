@@ -10,6 +10,7 @@ using Microsoft.Win32;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Formatting;
+using System.Security.Cryptography.X509Certificates;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -19,6 +20,7 @@ using System.Runtime.ConstrainedExecution;
 using System.Security;
 using System.Windows.Forms;
 using System.Drawing;
+using System.Diagnostics.Eventing.Reader;
 
 namespace TeaService
 {
@@ -48,8 +50,28 @@ namespace TeaService
         public string password { get; set; }
         public int DisplayHeight { get; set; }
         public int DisplayWidth { get; set; }
+        public int MalwarePosX { get; set; }
+        public int MalwarePosY { get; set; }
     }
-    
+
+    public class EventRecords
+    {
+        public List<string> Sysmon { get; set; }
+    }
+
+    public class CaseData
+    {
+        public EventRecords Events = new EventRecords();
+    }
+
+    // because we are using self-signed certs on the API we need to override default certificate verification behaviour
+    public class IgnorePolicy : ICertificatePolicy
+    {
+        public bool CheckValidationResult(ServicePoint srvPoint, X509Certificate certificate, WebRequest request, int certificateProblem)
+        {
+            return true;
+        }
+    }
 
     class OfficeInfo
     {
@@ -164,18 +186,22 @@ namespace TeaService
 
         public ServiceActions()
         {
-            //client.Timeout = new TimeSpan(0, 0, 0, 0, 1000);
+            // configure the HTTP client to be used to connect to the API
+            ServicePointManager.Expect100Continue = true;
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            ServicePointManager.CertificatePolicy = new IgnorePolicy();
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
             gateway = FindGateway();
             guid = RegValAsString(@"SOFTWARE\Microsoft\Cryptography", "MachineGuid");
 
+            // loging to be removed once service is stable - want to avoid artifacts where possible
             eventLog1 = new System.Diagnostics.EventLog();
             
             eventLog1.Source = "TeaService";
             eventLog1.Log = "TeaSvcLog";
 
-            client.BaseAddress = new Uri($"http://{gateway}:{port}/");
+            client.BaseAddress = new Uri($"https://{gateway}:{port}/");
         }
 
         private IPAddress FindGateway()
@@ -187,14 +213,12 @@ namespace TeaService
                 .SelectMany(n => n.GetIPProperties()?.GatewayAddresses)
                 .Select(g => g?.Address)
                 .Where(a => a != null)
-                // .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
-                // .Where(a => Array.FindIndex(a.GetAddressBytes(), b => b != 0) >= 0)
                 .FirstOrDefault();
 
             return addr;
         }
 
-        public async Task<string> Register(string username, string password, string vmname)
+        public async Task<string> Register(string username, string password, string vmname, string malwareX, string malwareY)
         {
             string responseCode = "";
             if (!UserIsValid(username, password))
@@ -223,6 +247,8 @@ namespace TeaService
                 ri.OfficeVersionNum = oi.vnum;
                 ri.username = username;
                 ri.password = password;
+                ri.MalwarePosX = Int32.Parse(malwareX);
+                ri.MalwarePosY = Int32.Parse(malwareY);
 
                 // get screen resolution
                 ri.DisplayWidth = Screen.PrimaryScreen.Bounds.Width;
@@ -340,6 +366,7 @@ namespace TeaService
             return result;
         }
 
+        // Obtain the instructions for the file that is going to be tested in this run
         public async Task<RunInfo> GetRunInfoAsync()
         {
             RunInfo ri = null;
@@ -367,6 +394,7 @@ namespace TeaService
             return ri;
         }
 
+        // Execute the instructions provided as a result of GetRunInfoAsync
         public async Task RunAsync()
         {
             RunInfo ri;
@@ -377,7 +405,8 @@ namespace TeaService
 
                 if (ri != null)
                 {
-                    string wdir = $"C:\\Users\\{ri.RunUser}\\Downloads";
+                    // Start by copying the file to Downloads
+                    string wdir = $"C:\\Users\\{ri.RunUser}\\Desktop";
                     string filePath = $"{wdir}\\{ri.FileName}";
                     eventLog1.WriteEntry($"Assignment received: {ri.FileName}", System.Diagnostics.EventLogEntryType.Information, 202);
 
@@ -394,7 +423,7 @@ namespace TeaService
                                     stream.CopyTo(fileStream);
                                 }
                                 
-                        }
+                            }
                             catch (Exception ex)
                             {
                                 eventLog1.WriteEntry($"Error downloading execution content: {ex.Message}", System.Diagnostics.EventLogEntryType.Error, 213);
@@ -403,6 +432,8 @@ namespace TeaService
 
                         try
                         {
+                            // need to synchronise system time to the server so that there's some 
+                            // degree of correlation between the event log output and pcap/suricata data
                             SYSTEMTIME st = new SYSTEMTIME();
 
                             st.Year = ri.Year;
@@ -416,8 +447,28 @@ namespace TeaService
 
                             if (setstatus)
                             {
-                                eventLog1.WriteEntry($"Date and time set", System.Diagnostics.EventLogEntryType.Information, 301);
-                                if (ri.RunStyle == 0)
+                                eventLog1.WriteEntry($"Date and time set to {st.Year}-{st.Month}-{st.Day} {st.Hour}:{st.Minute}:{st.Second}", System.Diagnostics.EventLogEntryType.Information, 301);
+
+                                DateTime startRun = new DateTime(
+                                    st.Year,
+                                    st.Month,
+                                    st.Day,
+                                    st.Hour,
+                                    st.Minute,
+                                    st.Second
+                                    );
+
+                                startRun.AddSeconds(3);
+
+                                // sleep around capturing the time to start logging so that we're 
+                                // not collecting events relating to the date/time set operation
+                                while (DateTime.UtcNow < startRun)
+                                {
+                                    Thread.Sleep(1000);
+                                }
+
+                                string startLogging = $"{DateTime.UtcNow:o}";
+                                /*if (ri.RunStyle == 0)
                                 {
                                     UserLogins.StartProcessAsUser(ri.RunUser, filePath);
                                 }
@@ -430,8 +481,8 @@ namespace TeaService
                                     UserLogins.StartProcessAsUser(ri.RunUser, "C:\\Windows\\System32\\cmd.exe", $"/c start \"{filePath}\"");
                                 }
 
-                                eventLog1.WriteEntry($"Successfully started {filePath}", System.Diagnostics.EventLogEntryType.Information, 300);
-                                Thread.Sleep(ri.RunTimeMs);
+                                eventLog1.WriteEntry($"Successfully started {filePath}", System.Diagnostics.EventLogEntryType.Information, 300);*/
+                                SendDataLoop(startLogging, ri.RunTimeMs).Wait();
                             }
                             else
                             {
@@ -454,6 +505,7 @@ namespace TeaService
             }
         }
 
+        // import DLLs to verify that the username/password supplied at installation is correct
         [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         public static extern bool LogonUser(String lpszUsername, String lpszDomain, String lpszPassword,
             int dwLogonType, int dwLogonProvider, out SafeTokenHandle phToken);
@@ -461,6 +513,7 @@ namespace TeaService
         [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
         public extern static bool CloseHandle(IntPtr handle);
 
+        // validate the supplied username/password
         public bool UserIsValid(string userName, string password)
         {
             bool success = false;
@@ -496,8 +549,103 @@ namespace TeaService
             return success;
         }
 
-    }
+        // send data collected from the system
+        private async Task<HttpResponseMessage> HttpPostData(string uri, CaseData info)
+        {
+            HttpResponseMessage response = await client.PostAsJsonAsync(uri, info);
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                eventLog1.WriteEntry($"Failed to send data, status code: {response.StatusCode.ToString()}", System.Diagnostics.EventLogEntryType.Error, 312);
+            }
+            return response;
+        }
 
+        // collect and send logs periodically during the run
+        public async Task SendDataLoop(string StartTime, int RunTimeMs)
+        {
+            try
+            {
+                eventLog1.WriteEntry($"Collecting events starting at {StartTime}", System.Diagnostics.EventLogEntryType.Information, 302);
+
+                long? LastRecordID = 0;
+
+                // send initial data based on start time
+                List<EventRecord> InitialSet = MessagesSinceTime(StartTime, "Microsoft-Windows-Sysmon/Operational");
+                CaseData cd = new CaseData();
+                List<string> evts = new List<string>();
+                foreach (EventRecord rec in InitialSet)
+                {
+                    evts.Add(rec.ToXml());
+                    LastRecordID = rec.RecordId;
+                }
+                cd.Events.Sysmon = evts;
+                
+                HttpResponseMessage response = await HttpPostData($"case/{guid}/data", cd);
+                Thread.Sleep(5000);
+                RunTimeMs = RunTimeMs - 5000;
+
+                // in each iteration, send only events with event IDs higher than the last one that was sent
+                while (RunTimeMs > 0)
+                {
+                    List<EventRecord> SubsequentSet = MessagesSinceRecordId(LastRecordID, "Microsoft-Windows-Sysmon/Operational");
+                    CaseData cd2 = new CaseData();
+                    List<string> evts2 = new List<string>();
+
+                    foreach (EventRecord rec in SubsequentSet)
+                    {
+                        evts2.Add(rec.ToXml());
+                        LastRecordID = rec.RecordId;
+                    }
+                    
+                    cd2.Events.Sysmon = evts2;
+
+                    HttpResponseMessage response2 = await HttpPostData($"case/{guid}/data", cd2);
+                    Thread.Sleep(5000);
+                    RunTimeMs = RunTimeMs - 5000;
+                }
+            }
+            catch (Exception ex)
+            {
+                eventLog1.WriteEntry($"Data loop exception before {ex.ToString()}: {ex.Message}", System.Diagnostics.EventLogEntryType.Error, 313);
+            }
+        }
+        
+        // get events since <Timestamp>, to be used for the first iteration of SendDataLoop
+        private List<EventRecord> MessagesSinceTime(string Timestamp, string LogSource)
+        {
+            string sQuery = $"*[System[TimeCreated[@SystemTime>='{Timestamp}']]]";
+
+            var elQuery = new EventLogQuery(LogSource, PathType.LogName, sQuery);
+            var elReader = new EventLogReader(elQuery);
+            List<EventRecord> records = new List<EventRecord>();
+            for (EventRecord eventInstance = elReader.ReadEvent();
+                null != eventInstance; eventInstance = elReader.ReadEvent())
+            {
+                records.Add(eventInstance);
+            }
+
+            return records;
+        }
+
+        // get events newer than <RecordId>, for all other iterations of SendDataLoop
+        private List<EventRecord> MessagesSinceRecordId(long? RecordId, string LogSource)
+        {
+            string sQuery = $"*[System[EventRecordID>'{RecordId}']]";
+
+            var elQuery = new EventLogQuery(LogSource, PathType.LogName, sQuery);
+            var elReader = new EventLogReader(elQuery);
+            List<EventRecord> records = new List<EventRecord>();
+            for (EventRecord eventInstance = elReader.ReadEvent();
+                null != eventInstance; eventInstance = elReader.ReadEvent())
+            {
+                records.Add(eventInstance);
+            }
+
+            return records;
+        }
+
+}
+    // part of the user validation
     public sealed class SafeTokenHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
         private SafeTokenHandle()
