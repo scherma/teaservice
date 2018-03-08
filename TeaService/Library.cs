@@ -443,6 +443,8 @@ namespace TeaService
                             st.Minute = ri.Minute;
                             st.Second = ri.Second;
 
+                            long? lastID = GetLastRecordId("Microsoft-Windows-Sysmon/Operational");
+
                             bool setstatus = Win32SetSystemTime(ref st);
 
                             if (setstatus)
@@ -468,6 +470,9 @@ namespace TeaService
                                 }
 
                                 string startLogging = $"{DateTime.UtcNow:o}";
+
+
+                                
                                 /*if (ri.RunStyle == 0)
                                 {
                                     UserLogins.StartProcessAsUser(ri.RunUser, filePath);
@@ -482,7 +487,9 @@ namespace TeaService
                                 }
 
                                 eventLog1.WriteEntry($"Successfully started {filePath}", System.Diagnostics.EventLogEntryType.Information, 300);*/
-                                SendDataLoop(startLogging, ri.RunTimeMs).Wait();
+                                SendDataLoop(lastID, ri.RunTimeMs).Wait();
+
+
                             }
                             else
                             {
@@ -550,7 +557,7 @@ namespace TeaService
         }
 
         // send data collected from the system
-        private async Task<HttpResponseMessage> HttpPostData(string uri, CaseData info)
+        private async Task<HttpResponseMessage> HttpPostData(string uri, Object info)
         {
             HttpResponseMessage response = await client.PostAsJsonAsync(uri, info);
             if (response.StatusCode != HttpStatusCode.OK)
@@ -559,13 +566,13 @@ namespace TeaService
             }
             return response;
         }
-
+        
         // collect and send logs periodically during the run
-        public async Task SendDataLoop(string StartTime, int RunTimeMs)
+        public async Task SendDataLoop(long? lastRecordId, int RunTimeMs)
         {
             try
             {
-                eventLog1.WriteEntry($"Collecting events starting at {StartTime}", System.Diagnostics.EventLogEntryType.Information, 302);
+                /*eventLog1.WriteEntry($"Collecting events starting at {lastRecordId}", System.Diagnostics.EventLogEntryType.Information, 302);
 
                 long? LastRecordID = 0;
 
@@ -582,19 +589,19 @@ namespace TeaService
                 
                 HttpResponseMessage response = await HttpPostData($"case/{guid}/data", cd);
                 Thread.Sleep(5000);
-                RunTimeMs = RunTimeMs - 5000;
+                RunTimeMs = RunTimeMs - 5000;*/
 
                 // in each iteration, send only events with event IDs higher than the last one that was sent
                 while (RunTimeMs > 0)
                 {
-                    List<EventRecord> SubsequentSet = MessagesSinceRecordId(LastRecordID, "Microsoft-Windows-Sysmon/Operational");
+                    List<EventRecord> SubsequentSet = MessagesSinceRecordId(lastRecordId, "Microsoft-Windows-Sysmon/Operational");
                     CaseData cd2 = new CaseData();
                     List<string> evts2 = new List<string>();
 
                     foreach (EventRecord rec in SubsequentSet)
                     {
                         evts2.Add(rec.ToXml());
-                        LastRecordID = rec.RecordId;
+                        lastRecordId = rec.RecordId;
                     }
                     
                     cd2.Events.Sysmon = evts2;
@@ -603,13 +610,33 @@ namespace TeaService
                     Thread.Sleep(5000);
                     RunTimeMs = RunTimeMs - 5000;
                 }
+
+                HttpResponseMessage response3 = await client.GetAsync($"case/{guid}/completed");
             }
             catch (Exception ex)
             {
                 eventLog1.WriteEntry($"Data loop exception before {ex.ToString()}: {ex.Message}", System.Diagnostics.EventLogEntryType.Error, 313);
             }
         }
-        
+
+        private long? GetLastRecordId(string LogSource)
+        {
+            string sQuery = "*";
+
+            var elQuery = new EventLogQuery(LogSource, PathType.LogName, sQuery);
+            var elReader = new EventLogReader(elQuery);
+            List<EventRecord> records = new List<EventRecord>();
+            for (EventRecord eventInstance = elReader.ReadEvent();
+                null != eventInstance; eventInstance = elReader.ReadEvent())
+            {
+                records.Add(eventInstance);
+            }
+
+            EventRecord lastRecord = records.Last();
+
+            return lastRecord.RecordId;
+        }
+
         // get events since <Timestamp>, to be used for the first iteration of SendDataLoop
         private List<EventRecord> MessagesSinceTime(string Timestamp, string LogSource)
         {
