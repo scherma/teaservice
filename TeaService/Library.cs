@@ -43,6 +43,7 @@ namespace TeaService
     {
         public string GUID { get; set; }
         public string VMName { get; set; }
+        public string VMIP { get; set; }
         public string OSName { get; set; }
         public string OfficeVersionString { get; set; }
         public string OfficeVersionNum { get; set; }
@@ -218,6 +219,21 @@ namespace TeaService
             return addr;
         }
 
+        private IPAddress FindIP()
+        {
+            IPAddress addr = NetworkInterface
+                .GetAllNetworkInterfaces()
+                .Where(n => n.OperationalStatus == OperationalStatus.Up)
+                .Where(n => n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+                .Select(g => g?.Address)
+                .Where(a => a != null)
+                .Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                .FirstOrDefault();
+
+            return addr;
+        }
+
         public async Task<string> Register(string username, string password, string vmname, string malwareX, string malwareY)
         {
             string responseCode = "";
@@ -249,6 +265,7 @@ namespace TeaService
                 ri.password = password;
                 ri.MalwarePosX = Int32.Parse(malwareX);
                 ri.MalwarePosY = Int32.Parse(malwareY);
+                ri.VMIP = FindIP().ToString();
 
                 // get screen resolution
                 ri.DisplayWidth = Screen.PrimaryScreen.Bounds.Width;
@@ -572,25 +589,6 @@ namespace TeaService
         {
             try
             {
-                /*eventLog1.WriteEntry($"Collecting events starting at {lastRecordId}", System.Diagnostics.EventLogEntryType.Information, 302);
-
-                long? LastRecordID = 0;
-
-                // send initial data based on start time
-                List<EventRecord> InitialSet = MessagesSinceTime(StartTime, "Microsoft-Windows-Sysmon/Operational");
-                CaseData cd = new CaseData();
-                List<string> evts = new List<string>();
-                foreach (EventRecord rec in InitialSet)
-                {
-                    evts.Add(rec.ToXml());
-                    LastRecordID = rec.RecordId;
-                }
-                cd.Events.Sysmon = evts;
-                
-                HttpResponseMessage response = await HttpPostData($"case/{guid}/data", cd);
-                Thread.Sleep(5000);
-                RunTimeMs = RunTimeMs - 5000;*/
-
                 // in each iteration, send only events with event IDs higher than the last one that was sent
                 while (RunTimeMs > 0)
                 {
@@ -606,7 +604,10 @@ namespace TeaService
                     
                     cd2.Events.Sysmon = evts2;
 
-                    HttpResponseMessage response2 = await HttpPostData($"case/{guid}/data", cd2);
+                    if (cd2.Events.Sysmon.Count > 0)
+                    {
+                        HttpResponseMessage response2 = await HttpPostData($"case/{guid}/data", cd2);
+                    }
                     Thread.Sleep(5000);
                     RunTimeMs = RunTimeMs - 5000;
                 }

@@ -55,10 +55,10 @@
     <StartupObject>TeaService.Program</StartupObject>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>0F71165510DD797DF14F699F8595634C23B6417D</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>93C55CD923221BE8B603E9D919C1EF5829C7D19D</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestKeyFile>TeaService_TemporaryKey.pfx</ManifestKeyFile>
+    <ManifestKeyFile>TeaService_1_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
     <GenerateManifests>true</GenerateManifests>
@@ -121,6 +121,7 @@
     <None Include="packages.config">
       <SubType>Designer</SubType>
     </None>
+    <None Include="TeaService_1_TemporaryKey.pfx" />
     <None Include="TeaService_TemporaryKey.pfx" />
   </ItemGroup>
   <ItemGroup>
